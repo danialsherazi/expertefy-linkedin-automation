@@ -1,0 +1,54 @@
+name: Buffer Relay
+
+on:
+  workflow_dispatch:
+    inputs:
+      query:
+        description: 'GraphQL query or mutation to send to Buffer'
+        required: true
+        type: string
+      variables:
+        description: 'JSON-encoded variables for the query'
+        required: false
+        default: '{}'
+        type: string
+
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Buffer GraphQL API
+        env:
+          BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
+          QUERY: ${{ github.event.inputs.query }}
+          VARIABLES: ${{ github.event.inputs.variables }}
+        run: |
+          python3 << 'PYEOF'
+          import json, os, urllib.request
+
+          query = os.environ["QUERY"]
+          variables = json.loads(os.environ["VARIABLES"])
+          payload = json.dumps({"query": query, "variables": variables}).encode()
+
+          req = urllib.request.Request(
+              "https://api.buffer.com/graphql",
+              data=payload,
+              headers={
+                  "Content-Type": "application/json",
+                  "Authorization": "Bearer " + os.environ["BUFFER_API_KEY"],
+              },
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(req) as resp:
+                  body = resp.read().decode()
+                  print("=== BUFFER_RESPONSE_START ===")
+                  print(body)
+                  print("=== BUFFER_RESPONSE_END ===")
+          except urllib.error.HTTPError as e:
+              print("=== BUFFER_ERROR_START ===")
+              print(f"HTTP {e.code}")
+              print(e.read().decode())
+              print("=== BUFFER_ERROR_END ===")
+              raise
+          PYEOF
